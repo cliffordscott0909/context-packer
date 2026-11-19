@@ -1,5 +1,7 @@
 # context-packer
 
+![tests](https://github.com/cliffordscott0909/context-packer/actions/workflows/tests.yml/badge.svg)
+
 Pack a project's source files into a single prompt for an AI coding assistant, with a rough token estimate and an optional budget.
 
 ```bash
