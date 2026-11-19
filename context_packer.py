@@ -13,6 +13,20 @@ def is_ignored(rel_path, ignores):
     return any(fnmatch.fnmatch(p, pat) for p in parts for pat in ignores)
 
 
+def load_gitignore(root):
+    """Read simple patterns from root/.gitignore (no negation or ** support)."""
+    path = os.path.join(root, ".gitignore")
+    if not os.path.isfile(path):
+        return []
+    pats = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith(("#", "!")):
+                pats.append(line.strip("/"))
+    return pats
+
+
 def collect_files(root, ignores=None, extensions=None):
     """Return sorted relative paths of text files under root."""
     ignores = DEFAULT_IGNORES if ignores is None else ignores
@@ -36,7 +50,7 @@ def estimate_tokens(text):
     return (len(text) + 3) // 4
 
 
-def pack(root, ignores=None, extensions=None, max_tokens=None):
+def pack(root, ignores=None, extensions=None, max_tokens=None, fmt="plain"):
     """Build the prompt text. Files that would exceed max_tokens are skipped."""
     chunks, skipped, used = [], [], 0
     for rel in collect_files(root, ignores, extensions):
@@ -46,7 +60,11 @@ def pack(root, ignores=None, extensions=None, max_tokens=None):
         except (UnicodeDecodeError, OSError):
             skipped.append(rel)
             continue
-        chunk = f"=== {rel} ===\n{body}\n"
+        if fmt == "markdown":
+            lang = os.path.splitext(rel)[1].lstrip(".")
+            chunk = f"## {rel}\n\n```{lang}\n{body.rstrip(chr(10))}\n```\n\n"
+        else:
+            chunk = f"=== {rel} ===\n{body}\n"
         cost = estimate_tokens(chunk)
         if max_tokens is not None and used + cost > max_tokens:
             skipped.append(rel)
@@ -61,9 +79,13 @@ def main(argv=None):
     p.add_argument("root", nargs="?", default=".")
     p.add_argument("-e", "--ext", action="append", help="only include this extension, e.g. .py")
     p.add_argument("-m", "--max-tokens", type=int, help="token budget")
+    p.add_argument("-g", "--gitignore", action="store_true", help="also honor patterns in root .gitignore")
+    p.add_argument("-f", "--format", choices=["plain", "markdown"], default="plain")
     p.add_argument("-o", "--output", help="write to file instead of stdout")
     a = p.parse_args(argv)
-    text, tokens, skipped = pack(a.root, extensions=a.ext, max_tokens=a.max_tokens)
+    ignores = DEFAULT_IGNORES + (load_gitignore(a.root) if a.gitignore else [])
+    text, tokens, skipped = pack(a.root, ignores=ignores, extensions=a.ext,
+                                 max_tokens=a.max_tokens, fmt=a.format)
     if a.output:
         with open(a.output, "w", encoding="utf-8") as f:
             f.write(text)

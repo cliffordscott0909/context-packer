@@ -42,3 +42,21 @@ def test_binary_file_skipped(tmp_path):
     (tmp_path / "bin.dat").write_bytes(b"\xff\xfe\x00\x81")
     _, _, skipped = cp.pack(str(tmp_path))
     assert skipped == ["bin.dat"]
+
+
+def test_load_gitignore(tmp_path):
+    (tmp_path / ".gitignore").write_text("# c\nsecrets.txt\nout/\n!keep\n")
+    assert cp.load_gitignore(str(tmp_path)) == ["secrets.txt", "out"]
+
+
+def test_gitignore_patterns_exclude(tmp_path):
+    make(tmp_path)
+    (tmp_path / "secrets.txt").write_text("k")
+    ig = cp.DEFAULT_IGNORES + ["secrets.txt", "pkg"]
+    assert cp.collect_files(str(tmp_path), ignores=ig) == ["a.py", "b.md"]
+
+
+def test_markdown_format(tmp_path):
+    (tmp_path / "a.py").write_text("x = 1\n")
+    text, _, _ = cp.pack(str(tmp_path), fmt="markdown")
+    assert text == "## a.py\n\n```py\nx = 1\n```\n\n"
